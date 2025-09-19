@@ -1,6 +1,5 @@
 terraform {
   required_providers {
-    # Используем встроенные провайдеры
     local = {
       source  = "hashicorp/local"
       version = "2.4.0"
@@ -12,32 +11,34 @@ terraform {
   }
 }
 
-# Вместо Docker будем использовать local-exec
 resource "null_resource" "build_and_run" {
   triggers = {
-    dockerfile_hash = filemd5("../app/Dockerfile")
-    app_code_hash   = filemd5("../app/app.py")
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
-    command = "./deploy.sh"
+    command = <<EOT
+      cd ../app && \
+      docker build -t flask-app:latest . && \
+      docker stop flask-app || true && \
+      docker rm flask-app || true && \
+      docker run -d -p 8000:5000 --name flask-app flask-app:latest
+    EOT
   }
 
   provisioner "local-exec" {
     when    = destroy
-    command = "(docker stop flask-app || true) && (docker rm flask-app || true)"
+    command = "docker stop flask-app || true && docker rm flask-app || true"
   }
 }
-
-
-
 
 resource "local_file" "deployment_info" {
   filename = "../deployment-info.txt"
   content  = <<EOT
-Application deployed with local-exec!
+Application deployed successfully!
 URL: http://localhost:8000
 Health check: http://localhost:8000/health
+Container: flask-app
 Deployment time: ${timestamp()}
 EOT
 
